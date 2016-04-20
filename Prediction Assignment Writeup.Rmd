@@ -1,0 +1,124 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Evandro Armelin"
+date: "17 de abril de 2016"
+output: html_document
+---
+
+#Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. It was used all of the other variables to predict with. A report has been created describing how the model was built, how cross validation was used and the expected out of sample error. The prediction model will be used to predict 20 different test cases.
+
+#Loading Data
+```{r warning=FALSE, results='hide', message=FALSE}
+#Loading necessary libraries
+library(foreign)
+library(caret)
+library(ggplot2)
+library(data.table)
+library(rattle)
+```
+
+```{r}
+#Loading training data
+url_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+datatrain <- fread(url_train)
+
+#Loading testing data
+url_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+datatest <- fread(url_test)
+```
+
+#Cleaning and Transforming Data
+```{r warning=FALSE, results='hide', message=FALSE}
+isAnyMissing <- sapply(datatrain, function (x) any(is.na(x) | x == ""))
+train_variables <- names(isAnyMissing)[!isAnyMissing]
+train_variables <- train_variables[-c(1:7)]
+datatrain <- datatrain[,train_variables, with=FALSE]
+datatrain$classe <- factor(datatrain$classe)
+```
+
+#Preparing the Data for Model Creation
+```{r warning=FALSE, results='hide', message=FALSE}
+#Splitting the provided trainning data into a 70% training set and a 30% testing set
+inTrain <- createDataPartition(datatrain$classe, p=0.7)
+datatrain_train <- datatrain[inTrain[[1]]]
+datatrain_probe <- datatrain[-inTrain[[1]]]
+
+#Checking for zero variance variables
+nzv <- nearZeroVar(datatrain_train, saveMetrics=TRUE)
+sum(nzv$nzv)
+```
+
+###Setting seed for reproducibility
+set.seed(123456)
+
+#Training a Randon Forest model
+```{r}
+#Activating Parallel Processing
+require(parallel)
+require(doParallel)
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+ctrl <- trainControl(classProbs=TRUE, savePredictions=TRUE, allowParallel=TRUE)
+
+#Creating the Randon Forest Model
+#trainingModelRF <- train(classe ~ ., data=datatrain_train, method="rf")
+colnames(datatrain_train)[53] <- "classe"
+load(file="trainingModelRF.RData", verbose=TRUE)
+
+#Validating the predictions against the Trainind Data
+predictTrainRF <- predict(trainingModelRF, datatrain_train)
+confusionMatrix(predictTrainRF, datatrain_train[,classe])
+
+#Main variable for the model
+varImp(trainingModelRF)
+```
+
+##Validating the Randon Forest model against the Probing Data
+```{r}
+predictProbeRF <- predict(trainingModelRF, datatrain_probe)
+confusionMatrix(predictProbeRF, datatrain_probe[,classe])
+```
+
+#Training a Tree model
+```{r}
+#Creating the Tree Model
+trainingModelRP <- train(classe ~ .,method='rpart',data=datatrain_train)
+colnames(datatrain_train)[53] <- "classe"
+
+#Validating the predictions against the Trainind Data
+predictTrainRP <- predict(trainingModelRP, datatrain_train)
+confusionMatrix(predictTrainRP, datatrain_train[,classe])
+```
+
+##Validating the Tree model against the Probing Data
+```{r}
+#Validating the Tree model against the Probing Data
+predictProbeRP <- predict(trainingModelRP, datatrain_probe)
+confusionMatrix(predictProbeRP, datatrain_probe[,classe])
+
+#Ilustrative graph
+fancyRpartPlot(trainingModelRP$finalModel)
+```
+
+#Applying the selecte model (Randon Forest) against the Testing Data
+```{r}
+test_variables <- train_variables[1:52]
+datatest <- datatest[,test_variables, with=FALSE]
+predictTestRF <- predict(trainingModelRF, datatest)
+predictTestRF
+```
+
+##Generating files to upload to submission
+```{r}
+ pml_write_files = function(x){
++     n = length(x)
++     path <- "answers"
++     for(i in 1:n){
++         filename = paste0("problem_id_",i,".txt")
++         write.table(x[i],file=file.path(path, filename),quote=FALSE,row.names=FALSE,col.names=FALSE)
++     }
++ }
+> pml_write_files(predictTestRF)
+```
