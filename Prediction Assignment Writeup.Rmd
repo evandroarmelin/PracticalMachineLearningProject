@@ -63,9 +63,8 @@ registerDoParallel(cl)
 ctrl <- trainControl(classProbs=TRUE, savePredictions=TRUE, allowParallel=TRUE)
 
 #Creating the Randon Forest Model
-#trainingModelRF <- train(classe ~ ., data=datatrain_train, method="rf")
+trainingModelRF <- train(classe ~ ., data=datatrain_train, method="rf")
 colnames(datatrain_train)[53] <- "classe"
-load(file="trainingModelRF.RData", verbose=TRUE)
 
 #Validating the predictions against the Trainind Data
 predictTrainRF <- predict(trainingModelRF, datatrain_train)
